@@ -1,0 +1,10 @@
+{
+  "name": "com.zuto.outfit-prop",
+  "displayName": "Zuto Avatar Tool",
+  "version": "1.0.0",
+  "description": "VRChat \u670d\u88c5\u4e0e\u9053\u5177 Expressions / FX \u83dc\u5355\u5236\u4f5c\u5de5\u5177",
+  "unity": "2022.3",
+  "author": {
+    "name": "zuto"
+  }
+}
