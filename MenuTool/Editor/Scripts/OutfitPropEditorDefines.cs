@@ -10,6 +10,11 @@ namespace AvatarOutfitPropEditor
         public const string MenuClothRoot = "服装";
         public const string MenuPropRoot = "道具";
         public const string MenuExtraRoot = "扩展";
+
+        /// <summary>VRChat 单页菜单最多 8 个控件。</summary>
+        public const int MenuMaxControlsPerPage = 8;
+        /// <summary>每页最多放 7 个内容项，第 8 个位置留给「下一页」。</summary>
+        public const int MenuControlsBeforeNextPage = 7;
         public const string FxClothLayerName = "服装切换";
         public const string FxExtraLayerLegacyName = "扩展切换";
 

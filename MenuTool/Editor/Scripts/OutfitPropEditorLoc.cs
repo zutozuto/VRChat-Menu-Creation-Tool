@@ -77,6 +77,8 @@ namespace AvatarOutfitPropEditor
         public static string TabOrnament => T("配饰", "アクセサリー", "Props", "액세서리");
         public static string TabExtra => T("扩展", "拡張", "Extra", "확장");
 
+        public static string NextPage => T("下一页", "次のページ", "Next Page", "다음 페이지");
+
         public static string ApplyToAvatar => T("一键应用到模型", "モデルに一括適用", "Apply to Avatar", "모델에 일괄 적용");
         public static string ClearTab => T("一键清空", "一括クリア", "Clear Tab", "일괄 비우기");
 

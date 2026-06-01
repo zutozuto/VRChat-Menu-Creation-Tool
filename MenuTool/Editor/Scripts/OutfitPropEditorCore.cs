@@ -852,6 +852,83 @@ namespace AvatarOutfitPropEditor
             });
         }
 
+        private static void FinalizeExpressionsMenuAsset(VRCExpressionsMenu menu, string assetPath)
+        {
+            if (menu == null)
+                return;
+            EditorUtility.SetDirty(menu);
+            if (string.IsNullOrEmpty(AssetDatabase.GetAssetPath(menu)))
+                AssetDatabase.CreateAsset(menu, assetPath);
+            AssetDatabase.SaveAssetIfDirty(menu);
+        }
+
+        private static void TryAdvanceMenuPage(
+            ref VRCExpressionsMenu current,
+            VRCExpressionsMenu root,
+            ref int pageIndex,
+            string menuDir,
+            string pageAssetPrefix)
+        {
+            if (current.controls.Count != OutfitPropEditorDefines.MenuControlsBeforeNextPage)
+                return;
+
+            var next = CreateInstance<VRCExpressionsMenu>();
+            current.controls.Add(new VRCExpressionsMenu.Control
+            {
+                name = OutfitPropEditorLoc.NextPage,
+                type = VRCExpressionsMenu.Control.ControlType.SubMenu,
+                subMenu = next
+            });
+            if (current != root)
+                FinalizeExpressionsMenuAsset(current, menuDir + pageAssetPrefix + pageIndex++ + ".asset");
+            current = next;
+        }
+
+        private static void FinalizeMenuPages(
+            VRCExpressionsMenu current,
+            VRCExpressionsMenu root,
+            int pageIndex,
+            string menuDir,
+            string pageAssetPrefix,
+            string rootAssetPath)
+        {
+            if (current != root)
+                FinalizeExpressionsMenuAsset(current, menuDir + pageAssetPrefix + pageIndex + ".asset");
+            EditorUtility.SetDirty(root);
+            FinalizeExpressionsMenuAsset(root, menuDir + rootAssetPath);
+        }
+
+        private sealed class PaginatedMenuBuilder
+        {
+            private readonly string _menuDir;
+            private readonly string _rootAssetFileName;
+            private readonly string _pageAssetPrefix;
+            public VRCExpressionsMenu Root { get; }
+            private VRCExpressionsMenu _current;
+            private int _pageIndex;
+
+            internal PaginatedMenuBuilder(string menuDir, string rootAssetFileName, string pageAssetPrefix)
+            {
+                _menuDir = menuDir;
+                _rootAssetFileName = rootAssetFileName;
+                _pageAssetPrefix = pageAssetPrefix;
+                Root = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
+                _current = Root;
+            }
+
+            internal void AddControl(VRCExpressionsMenu.Control control)
+            {
+                TryAdvanceMenuPage(ref _current, Root, ref _pageIndex, _menuDir, _pageAssetPrefix);
+                _current.controls.Add(control);
+            }
+
+            internal VRCExpressionsMenu FinalizeAll()
+            {
+                FinalizeMenuPages(_current, Root, _pageIndex, _menuDir, _pageAssetPrefix, _rootAssetFileName);
+                return Root;
+            }
+        }
+
         internal static void ApplyToAvatar(
             GameObject avatar,
             List<ClothObjInfo> clothInfoList,
@@ -904,7 +981,7 @@ namespace AvatarOutfitPropEditor
                 expressionParameters.parameters = parameterTemplate != null
                     ? parameterTemplate.parameters
                     : Array.Empty<VRCExpressionParameters.Parameter>();
-                AssetDatabase.CreateAsset(expressionParameters, dirPath + "ExpressionParameters.asset");
+                AssetDatabase.CreateAsset(expressionParameters, OutfitPropEditorUtils.JoinAssetPath(dirPath, "ExpressionParameters.asset"));
             }
 
             var newParameters = new List<VRCExpressionParameters.Parameter>();
@@ -951,8 +1028,6 @@ namespace AvatarOutfitPropEditor
                 for (var subIndex = 0; subIndex < clothInfoList[clothIndex].subToggleList.Count; subIndex++)
                 {
                     var sub = clothInfoList[clothIndex].subToggleList[subIndex];
-                    if (sub.item == null)
-                        continue;
                     newParameters.Add(new VRCExpressionParameters.Parameter
                     {
                         name = OutfitPropEditorDefines.ParamClothSub(clothIndex, subIndex),
@@ -992,8 +1067,6 @@ namespace AvatarOutfitPropEditor
                     for (var subIndex = 0; subIndex < group.setList[setIndex].subToggleList.Count; subIndex++)
                     {
                         var sub = group.setList[setIndex].subToggleList[subIndex];
-                        if (sub.item == null)
-                            continue;
                         newParameters.Add(new VRCExpressionParameters.Parameter
                         {
                             name = OutfitPropEditorDefines.ParamExtraSub(groupIndex, setIndex, subIndex),
@@ -1006,11 +1079,8 @@ namespace AvatarOutfitPropEditor
             }
             expressionParameters.parameters = newParameters.ToArray();
 
-            var menuDir = dirPath + "Menu/OutfitPropEditor";
-            if (Directory.Exists(menuDir))
-                Directory.Delete(menuDir, true);
-            Directory.CreateDirectory(menuDir);
-            menuDir += "/";
+            OutfitPropEditorUtils.DeleteLegacyConcatenatedFolders(dirPath);
+            var menuDir = OutfitPropEditorUtils.PrepareGeneratedAssetFolder(dirPath, "Menu/OutfitPropEditor");
 
             var mainClothMenu = CreateInstance<VRCExpressionsMenu>();
             {
@@ -1019,22 +1089,13 @@ namespace AvatarOutfitPropEditor
                 for (var clothIndex = 0; clothIndex < clothInfoList.Count; clothIndex++)
                 {
                     var info = clothInfoList[clothIndex];
-                    if (clothMenu.controls.Count == 7)
-                    {
-                        var next = CreateInstance<VRCExpressionsMenu>();
-                        AssetDatabase.CreateAsset(next, menuDir + "ClothMenu_" + pageIndex++ + ".asset");
-                        clothMenu.controls.Add(new VRCExpressionsMenu.Control
-                        {
-                            name = "下一页",
-                            type = VRCExpressionsMenu.Control.ControlType.SubMenu,
-                            subMenu = next
-                        });
-                        clothMenu = next;
-                    }
+                    TryAdvanceMenuPage(ref clothMenu, mainClothMenu, ref pageIndex, menuDir, "ClothMenu_");
 
-                    var clothSubMenu = CreateInstance<VRCExpressionsMenu>();
-                    AssetDatabase.CreateAsset(clothSubMenu, menuDir + "ClothSub_" + clothIndex + ".asset");
-                    clothSubMenu.controls.Add(new VRCExpressionsMenu.Control
+                    var clothSubBuilder = new PaginatedMenuBuilder(
+                        menuDir,
+                        "ClothSub_" + clothIndex + ".asset",
+                        "ClothSub_" + clothIndex + "_Page_");
+                    clothSubBuilder.AddControl(new VRCExpressionsMenu.Control
                     {
                         name = "穿戴",
                         icon = info.image,
@@ -1047,11 +1108,12 @@ namespace AvatarOutfitPropEditor
                         for (var subIndex = 0; subIndex < info.subToggleList.Count; subIndex++)
                         {
                             var sub = info.subToggleList[subIndex];
-                            if (sub.item == null)
-                                continue;
-                            clothSubMenu.controls.Add(new VRCExpressionsMenu.Control
+                            var displayName = sub.item != null
+                                ? sub.item.name
+                                : (string.IsNullOrEmpty(sub.name) ? ("子开关" + (subIndex + 1)) : sub.name);
+                            clothSubBuilder.AddControl(new VRCExpressionsMenu.Control
                             {
-                                name = sub.item != null ? sub.item.name : (string.IsNullOrEmpty(sub.name) ? ("子开关" + (subIndex + 1)) : sub.name),
+                                name = displayName,
                                 icon = sub.image,
                                 type = VRCExpressionsMenu.Control.ControlType.Toggle,
                                 parameter = new VRCExpressionsMenu.Control.Parameter { name = OutfitPropEditorDefines.ParamClothSub(clothIndex, subIndex) }
@@ -1059,6 +1121,7 @@ namespace AvatarOutfitPropEditor
                         }
                     }
 
+                    var clothSubMenu = clothSubBuilder.FinalizeAll();
                     clothMenu.controls.Add(new VRCExpressionsMenu.Control
                     {
                         name = info.name,
@@ -1066,9 +1129,9 @@ namespace AvatarOutfitPropEditor
                         type = VRCExpressionsMenu.Control.ControlType.SubMenu,
                         subMenu = clothSubMenu
                     });
-                    EditorUtility.SetDirty(clothSubMenu);
+                    EditorUtility.SetDirty(clothMenu);
                 }
-                AssetDatabase.CreateAsset(mainClothMenu, menuDir + "ClothMenu.asset");
+                FinalizeMenuPages(clothMenu, mainClothMenu, pageIndex, menuDir, "ClothMenu_", "ClothMenu.asset");
             }
 
             var mainExtraMenu = CreateInstance<VRCExpressionsMenu>();
@@ -1091,42 +1154,26 @@ namespace AvatarOutfitPropEditor
                     if (group.setList.Count == 0)
                         continue;
 
-                    if (extraMenu.controls.Count == 7)
-                    {
-                        var next = CreateInstance<VRCExpressionsMenu>();
-                        AssetDatabase.CreateAsset(next, menuDir + "ExtraMenu_" + rootPageIndex++ + ".asset");
-                        extraMenu.controls.Add(new VRCExpressionsMenu.Control
-                        {
-                            name = "下一页",
-                            type = VRCExpressionsMenu.Control.ControlType.SubMenu,
-                            subMenu = next
-                        });
-                        extraMenu = next;
-                    }
+                    TryAdvanceMenuPage(ref extraMenu, mainExtraMenu, ref rootPageIndex, menuDir, "ExtraMenu_");
 
                     var groupMenu = CreateInstance<VRCExpressionsMenu>();
-                    AssetDatabase.CreateAsset(groupMenu, menuDir + "ExtraGroup_" + groupIndex + ".asset");
                     var groupPageIndex = 0;
                     var setMenu = groupMenu;
                     for (var setIndex = 0; setIndex < group.setList.Count; setIndex++)
                     {
                         var info = group.setList[setIndex];
-                        if (setMenu.controls.Count == 7)
-                        {
-                            var next = CreateInstance<VRCExpressionsMenu>();
-                            AssetDatabase.CreateAsset(next, menuDir + "ExtraGroup_" + groupIndex + "_Page_" + groupPageIndex++ + ".asset");
-                            setMenu.controls.Add(new VRCExpressionsMenu.Control
-                            {
-                                name = "下一页",
-                                type = VRCExpressionsMenu.Control.ControlType.SubMenu,
-                                subMenu = next
-                            });
-                            setMenu = next;
-                        }
+                        TryAdvanceMenuPage(
+                            ref setMenu,
+                            groupMenu,
+                            ref groupPageIndex,
+                            menuDir,
+                            "ExtraGroup_" + groupIndex + "_Page_");
 
-                        var extraSubMenu = CreateInstance<VRCExpressionsMenu>();
-                        AssetDatabase.CreateAsset(extraSubMenu, menuDir + "ExtraSub_" + groupIndex + "_" + setIndex + ".asset");
-                        extraSubMenu.controls.Add(new VRCExpressionsMenu.Control
+                        var extraSubBuilder = new PaginatedMenuBuilder(
+                            menuDir,
+                            "ExtraSub_" + groupIndex + "_" + setIndex + ".asset",
+                            "ExtraSub_" + groupIndex + "_" + setIndex + "_Page_");
+                        extraSubBuilder.AddControl(new VRCExpressionsMenu.Control
                         {
                             name = "穿戴",
                             icon = info.image,
@@ -1142,11 +1189,12 @@ namespace AvatarOutfitPropEditor
                             for (var subIndex = 0; subIndex < info.subToggleList.Count; subIndex++)
                             {
                                 var sub = info.subToggleList[subIndex];
-                                if (sub.item == null)
-                                    continue;
-                                extraSubMenu.controls.Add(new VRCExpressionsMenu.Control
+                                var displayName = sub.item != null
+                                    ? sub.item.name
+                                    : (string.IsNullOrEmpty(sub.name) ? ("子开关" + (subIndex + 1)) : sub.name);
+                                extraSubBuilder.AddControl(new VRCExpressionsMenu.Control
                                 {
-                                    name = sub.item != null ? sub.item.name : (string.IsNullOrEmpty(sub.name) ? ("子开关" + (subIndex + 1)) : sub.name),
+                                    name = displayName,
                                     icon = sub.image,
                                     type = VRCExpressionsMenu.Control.ControlType.Toggle,
                                     parameter = new VRCExpressionsMenu.Control.Parameter
@@ -1157,6 +1205,7 @@ namespace AvatarOutfitPropEditor
                             }
                         }
 
+                        var extraSubMenu = extraSubBuilder.FinalizeAll();
                         setMenu.controls.Add(new VRCExpressionsMenu.Control
                         {
                             name = info.name,
@@ -1164,8 +1213,15 @@ namespace AvatarOutfitPropEditor
                             type = VRCExpressionsMenu.Control.ControlType.SubMenu,
                             subMenu = extraSubMenu
                         });
-                        EditorUtility.SetDirty(extraSubMenu);
                     }
+
+                    FinalizeMenuPages(
+                        setMenu,
+                        groupMenu,
+                        groupPageIndex,
+                        menuDir,
+                        "ExtraGroup_" + groupIndex + "_Page_",
+                        "ExtraGroup_" + groupIndex + ".asset");
 
                     extraMenu.controls.Add(new VRCExpressionsMenu.Control
                     {
@@ -1173,9 +1229,9 @@ namespace AvatarOutfitPropEditor
                         type = VRCExpressionsMenu.Control.ControlType.SubMenu,
                         subMenu = groupMenu
                     });
-                    EditorUtility.SetDirty(groupMenu);
+                    EditorUtility.SetDirty(extraMenu);
                 }
-                AssetDatabase.CreateAsset(mainExtraMenu, menuDir + "ExtraMenu.asset");
+                FinalizeMenuPages(extraMenu, mainExtraMenu, rootPageIndex, menuDir, "ExtraMenu_", "ExtraMenu.asset");
             }
 
             var mainOrnamentMenu = CreateInstance<VRCExpressionsMenu>();
@@ -1186,22 +1242,13 @@ namespace AvatarOutfitPropEditor
                 for (var ornamentIndex = 0; ornamentIndex < ornamentInfoList.Count; ornamentIndex++)
                 {
                     var info = ornamentInfoList[ornamentIndex];
-                    if (ornamentMenu.controls.Count == 7)
-                    {
-                        var next = CreateInstance<VRCExpressionsMenu>();
-                        AssetDatabase.CreateAsset(next, menuDir + "OrnamentMenu_" + pageIndex++ + ".asset");
-                        ornamentMenu.controls.Add(new VRCExpressionsMenu.Control
-                        {
-                            name = "下一页",
-                            type = VRCExpressionsMenu.Control.ControlType.SubMenu,
-                            subMenu = next
-                        });
-                        ornamentMenu = next;
-                    }
+                    TryAdvanceMenuPage(ref ornamentMenu, mainOrnamentMenu, ref pageIndex, menuDir, "OrnamentMenu_");
 
-                    var ornamentSubMenu = CreateInstance<VRCExpressionsMenu>();
-                    AssetDatabase.CreateAsset(ornamentSubMenu, menuDir + "OrnamentSub_" + ornamentIndex + ".asset");
-                    ornamentSubMenu.controls.Add(new VRCExpressionsMenu.Control
+                    var ornamentSubBuilder = new PaginatedMenuBuilder(
+                        menuDir,
+                        "OrnamentSub_" + ornamentIndex + ".asset",
+                        "OrnamentSub_" + ornamentIndex + "_Page_");
+                    ornamentSubBuilder.AddControl(new VRCExpressionsMenu.Control
                     {
                         name = "开关",
                         icon = info.image,
@@ -1213,11 +1260,12 @@ namespace AvatarOutfitPropEditor
                         for (var subIndex = 0; subIndex < info.subToggleList.Count; subIndex++)
                         {
                             var sub = info.subToggleList[subIndex];
-                            if (sub.item == null)
-                                continue;
-                            ornamentSubMenu.controls.Add(new VRCExpressionsMenu.Control
+                            var displayName = sub.item != null
+                                ? sub.item.name
+                                : (string.IsNullOrEmpty(sub.name) ? ("子开关" + (subIndex + 1)) : sub.name);
+                            ornamentSubBuilder.AddControl(new VRCExpressionsMenu.Control
                             {
-                                name = sub.item.name,
+                                name = displayName,
                                 icon = sub.image,
                                 type = VRCExpressionsMenu.Control.ControlType.Toggle,
                                 parameter = new VRCExpressionsMenu.Control.Parameter { name = OutfitPropEditorDefines.ParamOrnSub(ornamentIndex, subIndex) }
@@ -1225,6 +1273,7 @@ namespace AvatarOutfitPropEditor
                         }
                     }
 
+                    var ornamentSubMenu = ornamentSubBuilder.FinalizeAll();
                     ornamentMenu.controls.Add(new VRCExpressionsMenu.Control
                     {
                         name = info.name,
@@ -1232,9 +1281,9 @@ namespace AvatarOutfitPropEditor
                         type = VRCExpressionsMenu.Control.ControlType.SubMenu,
                         subMenu = ornamentSubMenu
                     });
-                    EditorUtility.SetDirty(ornamentSubMenu);
+                    EditorUtility.SetDirty(ornamentMenu);
                 }
-                AssetDatabase.CreateAsset(mainOrnamentMenu, menuDir + "OrnamentMenu.asset");
+                FinalizeMenuPages(ornamentMenu, mainOrnamentMenu, pageIndex, menuDir, "OrnamentMenu_", "OrnamentMenu.asset");
             }
 
             if (expressionsMenu == null)
@@ -1255,7 +1304,12 @@ namespace AvatarOutfitPropEditor
                     extraControl = control;
             }
 
-            if (clothControl == null)
+            if (clothInfoList.Count == 0)
+            {
+                if (clothControl != null)
+                    expressionsMenu.controls.Remove(clothControl);
+            }
+            else if (clothControl == null)
             {
                 expressionsMenu.controls.Add(new VRCExpressionsMenu.Control
                 {
@@ -1269,50 +1323,50 @@ namespace AvatarOutfitPropEditor
                 clothControl.subMenu = mainClothMenu;
             }
 
-            if (ornamentInfoList.Count > 0)
+            if (ornamentInfoList.Count == 0)
             {
-                if (ornamentControl == null)
+                if (ornamentControl != null)
+                    expressionsMenu.controls.Remove(ornamentControl);
+            }
+            else if (ornamentControl == null)
+            {
+                expressionsMenu.controls.Add(new VRCExpressionsMenu.Control
                 {
-                    expressionsMenu.controls.Add(new VRCExpressionsMenu.Control
-                    {
-                        name = OutfitPropEditorDefines.MenuPropRoot,
-                        type = VRCExpressionsMenu.Control.ControlType.SubMenu,
-                        subMenu = mainOrnamentMenu
-                    });
-                }
-                else
-                {
-                    ornamentControl.subMenu = mainOrnamentMenu;
-                }
+                    name = OutfitPropEditorDefines.MenuPropRoot,
+                    type = VRCExpressionsMenu.Control.ControlType.SubMenu,
+                    subMenu = mainOrnamentMenu
+                });
+            }
+            else
+            {
+                ornamentControl.subMenu = mainOrnamentMenu;
             }
 
-            if (hasExtraContent)
+            if (!hasExtraContent)
             {
-                if (extraControl == null)
+                if (extraControl != null)
+                    expressionsMenu.controls.Remove(extraControl);
+            }
+            else if (extraControl == null)
+            {
+                expressionsMenu.controls.Add(new VRCExpressionsMenu.Control
                 {
-                    expressionsMenu.controls.Add(new VRCExpressionsMenu.Control
-                    {
-                        name = OutfitPropEditorDefines.MenuExtraRoot,
-                        type = VRCExpressionsMenu.Control.ControlType.SubMenu,
-                        subMenu = mainExtraMenu
-                    });
-                }
-                else
-                {
-                    extraControl.subMenu = mainExtraMenu;
-                }
+                    name = OutfitPropEditorDefines.MenuExtraRoot,
+                    type = VRCExpressionsMenu.Control.ControlType.SubMenu,
+                    subMenu = mainExtraMenu
+                });
+            }
+            else
+            {
+                extraControl.subMenu = mainExtraMenu;
             }
 
             if (AssetDatabase.GetAssetPath(expressionsMenu) == "")
-                AssetDatabase.CreateAsset(expressionsMenu, dirPath + "ExpressionsMenu.asset");
+                AssetDatabase.CreateAsset(expressionsMenu, OutfitPropEditorUtils.JoinAssetPath(dirPath, "ExpressionsMenu.asset"));
             else
                 EditorUtility.SetDirty(expressionsMenu);
 
-            var animDir = dirPath + "Anim/OutfitPropEditor";
-            if (Directory.Exists(animDir))
-                Directory.Delete(animDir, true);
-            Directory.CreateDirectory(animDir);
-            animDir += "/";
+            var animDir = OutfitPropEditorUtils.PrepareGeneratedAssetFolder(dirPath, "Anim/OutfitPropEditor");
 
             var clothAnimClipList = new List<AnimationClip>();
             for (var index = 0; index < clothInfoList.Count; index++)
@@ -1426,7 +1480,7 @@ namespace AvatarOutfitPropEditor
                         stateMachine = stateMachine
                     };
                     fxController.AddLayer(layer);
-                    AssetDatabase.CreateAsset(fxController, dirPath + "FXLayer.controller");
+                    AssetDatabase.CreateAsset(fxController, OutfitPropEditorUtils.JoinAssetPath(dirPath, "FXLayer.controller"));
                     AssetDatabase.AddObjectToAsset(stateMachine, AssetDatabase.GetAssetPath(fxController));
                     descriptor.baseAnimationLayers[i].animatorController = fxController;
                     descriptor.baseAnimationLayers[i].isEnabled = true;

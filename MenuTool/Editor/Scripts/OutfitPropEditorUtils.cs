@@ -23,6 +23,53 @@ namespace AvatarOutfitPropEditor
         public static string GetConfigAssetPath(string avatarId) =>
             $"{GetAvatarDataDir(avatarId)}/{OutfitPropEditorDefines.ConfigFileName}";
 
+        public static string JoinAssetPath(string parentPath, string childPath)
+        {
+            if (string.IsNullOrEmpty(parentPath))
+                return childPath;
+            if (string.IsNullOrEmpty(childPath))
+                return parentPath;
+            return parentPath.TrimEnd('/') + "/" + childPath.TrimStart('/');
+        }
+
+        /// <summary>
+        /// 通过 AssetDatabase 删除并重建生成目录，避免 Directory.Delete 导致子菜单资产引用丢失。
+        /// </summary>
+        public static string PrepareGeneratedAssetFolder(string avatarDataDir, string relativeFolderPath)
+        {
+            var folderPath = JoinAssetPath(avatarDataDir, relativeFolderPath);
+            if (AssetDatabase.IsValidFolder(folderPath))
+            {
+                AssetDatabase.DeleteAsset(folderPath);
+                AssetDatabase.Refresh();
+            }
+
+            var parts = relativeFolderPath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+            var current = avatarDataDir.TrimEnd('/');
+            foreach (var part in parts)
+            {
+                var next = current + "/" + part;
+                if (!AssetDatabase.IsValidFolder(next))
+                    AssetDatabase.CreateFolder(current, part);
+                current = next;
+            }
+
+            return folderPath + "/";
+        }
+
+        /// <summary>
+        /// 清理旧版路径拼接错误产生的目录（如 xxxMenu 而非 xxx/Menu）。
+        /// </summary>
+        public static void DeleteLegacyConcatenatedFolders(string avatarDataDir)
+        {
+            var legacyMenu = avatarDataDir + "Menu";
+            var legacyAnim = avatarDataDir + "Anim";
+            if (AssetDatabase.IsValidFolder(legacyMenu))
+                AssetDatabase.DeleteAsset(legacyMenu);
+            if (AssetDatabase.IsValidFolder(legacyAnim))
+                AssetDatabase.DeleteAsset(legacyAnim);
+        }
+
         public static void ClearConsole()
         {
             if (clearConsoleMethod == null)

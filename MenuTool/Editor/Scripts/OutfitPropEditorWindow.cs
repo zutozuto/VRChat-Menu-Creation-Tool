@@ -1,4 +1,5 @@
 #if UNITY_EDITOR && VRC_SDK_VRCSDK3
+using System;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
@@ -10,21 +11,40 @@ namespace AvatarOutfitPropEditor
     {
         private Vector2 scrollPos;
         private int tabIndex;
-        protected SerializedObject serializedObject;
 
         private GameObject avatar;
         private OutfitPropConfig parameter;
         private string avatarId;
         private int defaultClothIndex = -1;
 
-        public List<ClothObjInfo> clothInfoList = new List<ClothObjInfo>();
-        public List<OrnamentObjInfo> ornamentInfoList = new List<OrnamentObjInfo>();
-        public List<ExtraGroupObjInfo> extraGroupList = new List<ExtraGroupObjInfo>();
+        // 不参与 EditorWindow 序列化，避免切换 Tab 时 serializedObject.Update 覆盖其他 Tab 的数据
+        [NonSerialized] public List<ClothObjInfo> clothInfoList = new List<ClothObjInfo>();
+        [NonSerialized] public List<OrnamentObjInfo> ornamentInfoList = new List<OrnamentObjInfo>();
+        [NonSerialized] public List<ExtraGroupObjInfo> extraGroupList = new List<ExtraGroupObjInfo>();
 
         private void OnEnable()
         {
             titleContent = new GUIContent(OutfitPropEditorLoc.WindowTitle);
-            serializedObject = new SerializedObject(this);
+            if (avatar != null)
+            {
+                if (parameter == null)
+                {
+                    avatarId = OutfitPropEditorUtils.GetAvatarId(avatar);
+                    parameter = GetParameter(avatarId);
+                }
+                if (parameter != null)
+                    ReadParameter();
+                else
+                    ReattachAnimBoolListeners();
+            }
+            else
+            {
+                ReattachAnimBoolListeners();
+            }
+        }
+
+        private void ReattachAnimBoolListeners()
+        {
             foreach (var info in clothInfoList)
             {
                 info.animBool.valueChanged.RemoveAllListeners();
@@ -114,7 +134,7 @@ namespace AvatarOutfitPropEditor
 
             OutfitPropEditorGui.SectionGap(12);
             if (GUILayout.Button(OutfitPropEditorLoc.ApplyToAvatar, GUILayout.Height(28)))
-                ApplyToAvatar(avatar, clothInfoList, defaultClothIndex, ornamentInfoList, extraGroupList);
+                ApplyToAvatarFromWindow();
 
             OutfitPropEditorGui.SectionGap(6);
             if (GUILayout.Button(OutfitPropEditorLoc.ClearTab, GUILayout.Height(24)))
@@ -137,7 +157,6 @@ namespace AvatarOutfitPropEditor
             }
             else
             {
-                serializedObject.Update();
                 var nameList = new List<string>();
                 foreach (var info in clothInfoList)
                     nameList.Add(info.name);
@@ -219,10 +238,7 @@ namespace AvatarOutfitPropEditor
                 }
 
                 if (EditorGUI.EndChangeCheck())
-                {
-                    serializedObject.ApplyModifiedProperties();
                     WriteParameter();
-                }
             }
             GUILayout.EndScrollView();
         }
@@ -243,7 +259,6 @@ namespace AvatarOutfitPropEditor
             }
             else
             {
-                serializedObject.Update();
                 var groupNameList = new List<string>();
                 foreach (var g in extraGroupList)
                     groupNameList.Add(g.name);
@@ -374,10 +389,7 @@ namespace AvatarOutfitPropEditor
                 }
 
                 if (EditorGUI.EndChangeCheck())
-                {
-                    serializedObject.ApplyModifiedProperties();
                     WriteParameter();
-                }
             }
             GUILayout.EndScrollView();
         }
@@ -395,7 +407,6 @@ namespace AvatarOutfitPropEditor
             }
             else
             {
-                serializedObject.Update();
                 var nameList = new List<string>();
                 foreach (var info in ornamentInfoList)
                     nameList.Add(info.name);
@@ -473,10 +484,7 @@ namespace AvatarOutfitPropEditor
                 }
 
                 if (EditorGUI.EndChangeCheck())
-                {
-                    serializedObject.ApplyModifiedProperties();
                     WriteParameter();
-                }
             }
             GUILayout.EndScrollView();
         }
@@ -839,14 +847,12 @@ namespace AvatarOutfitPropEditor
                 foreach (var sub in info.subToggleList)
                 {
                     var t = avatar.transform.Find(sub.itemPath);
-                    if (t == null)
-                        continue;
                     cloth.subToggleList.Add(new SubToggleObjInfo
                     {
-                        name = t.gameObject.name,
+                        name = t != null ? t.gameObject.name : sub.name,
                         image = sub.menuImage,
                         defaultShow = sub.defaultShow,
-                        item = t.gameObject
+                        item = t != null ? t.gameObject : null
                     });
                 }
                 clothInfoList.Add(cloth);
@@ -907,14 +913,12 @@ namespace AvatarOutfitPropEditor
                 foreach (var sub in info.subToggleList)
                 {
                     var t = avatar.transform.Find(sub.itemPath);
-                    if (t == null)
-                        continue;
                     ornament.subToggleList.Add(new SubToggleObjInfo
                     {
-                        name = t.gameObject.name,
+                        name = t != null ? t.gameObject.name : sub.name,
                         image = sub.menuImage,
                         defaultShow = sub.defaultShow,
-                        item = t.gameObject
+                        item = t != null ? t.gameObject : null
                     });
                 }
                 ornamentInfoList.Add(ornament);
@@ -946,17 +950,25 @@ namespace AvatarOutfitPropEditor
             foreach (var sub in info.subToggleList)
             {
                 var t = avatar.transform.Find(sub.itemPath);
-                if (t == null)
-                    continue;
                 extraSet.subToggleList.Add(new SubToggleObjInfo
                 {
-                    name = t.gameObject.name,
+                    name = t != null ? t.gameObject.name : sub.name,
                     image = sub.menuImage,
                     defaultShow = sub.defaultShow,
-                    item = t.gameObject
+                    item = t != null ? t.gameObject : null
                 });
             }
             return extraSet;
+        }
+
+        private void ApplyToAvatarFromWindow()
+        {
+            if (avatar == null || parameter == null)
+                return;
+
+            // 应用前始终从配置文件加载全部 Tab 数据，避免在「扩展」Tab 应用时衣服子开关内存数据丢失
+            ReadParameter();
+            ApplyToAvatar(avatar, clothInfoList, defaultClothIndex, ornamentInfoList, extraGroupList);
         }
 
         private void WriteParameter()
