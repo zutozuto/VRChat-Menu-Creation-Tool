@@ -1091,20 +1091,28 @@ namespace AvatarOutfitPropEditor
                     var info = clothInfoList[clothIndex];
                     TryAdvanceMenuPage(ref clothMenu, mainClothMenu, ref pageIndex, menuDir, "ClothMenu_");
 
-                    var clothSubBuilder = new PaginatedMenuBuilder(
-                        menuDir,
-                        "ClothSub_" + clothIndex + ".asset",
-                        "ClothSub_" + clothIndex + "_Page_");
-                    clothSubBuilder.AddControl(new VRCExpressionsMenu.Control
+                    var clothItemControl = new VRCExpressionsMenu.Control
                     {
-                        name = "穿戴",
+                        name = info.name,
                         icon = info.image,
                         type = VRCExpressionsMenu.Control.ControlType.Toggle,
                         parameter = new VRCExpressionsMenu.Control.Parameter { name = OutfitPropEditorDefines.ParamClothInt },
                         value = clothIndex
-                    });
+                    };
                     if (info.enableSubMenu)
                     {
+                        var clothSubBuilder = new PaginatedMenuBuilder(
+                            menuDir,
+                            "ClothSub_" + clothIndex + ".asset",
+                            "ClothSub_" + clothIndex + "_Page_");
+                        clothSubBuilder.AddControl(new VRCExpressionsMenu.Control
+                        {
+                            name = "穿戴",
+                            icon = info.image,
+                            type = VRCExpressionsMenu.Control.ControlType.Toggle,
+                            parameter = new VRCExpressionsMenu.Control.Parameter { name = OutfitPropEditorDefines.ParamClothInt },
+                            value = clothIndex
+                        });
                         for (var subIndex = 0; subIndex < info.subToggleList.Count; subIndex++)
                         {
                             var sub = info.subToggleList[subIndex];
@@ -1119,16 +1127,14 @@ namespace AvatarOutfitPropEditor
                                 parameter = new VRCExpressionsMenu.Control.Parameter { name = OutfitPropEditorDefines.ParamClothSub(clothIndex, subIndex) }
                             });
                         }
+
+                        var clothSubMenu = clothSubBuilder.FinalizeAll();
+                        clothItemControl.type = VRCExpressionsMenu.Control.ControlType.SubMenu;
+                        clothItemControl.subMenu = clothSubMenu;
+                        clothItemControl.parameter = null;
                     }
 
-                    var clothSubMenu = clothSubBuilder.FinalizeAll();
-                    clothMenu.controls.Add(new VRCExpressionsMenu.Control
-                    {
-                        name = info.name,
-                        icon = info.image,
-                        type = VRCExpressionsMenu.Control.ControlType.SubMenu,
-                        subMenu = clothSubMenu
-                    });
+                    clothMenu.controls.Add(clothItemControl);
                     EditorUtility.SetDirty(clothMenu);
                 }
                 FinalizeMenuPages(clothMenu, mainClothMenu, pageIndex, menuDir, "ClothMenu_", "ClothMenu.asset");
@@ -1169,13 +1175,9 @@ namespace AvatarOutfitPropEditor
                             menuDir,
                             "ExtraGroup_" + groupIndex + "_Page_");
 
-                        var extraSubBuilder = new PaginatedMenuBuilder(
-                            menuDir,
-                            "ExtraSub_" + groupIndex + "_" + setIndex + ".asset",
-                            "ExtraSub_" + groupIndex + "_" + setIndex + "_Page_");
-                        extraSubBuilder.AddControl(new VRCExpressionsMenu.Control
+                        var extraItemControl = new VRCExpressionsMenu.Control
                         {
-                            name = "穿戴",
+                            name = info.name,
                             icon = info.image,
                             type = VRCExpressionsMenu.Control.ControlType.Toggle,
                             parameter = new VRCExpressionsMenu.Control.Parameter
@@ -1183,9 +1185,24 @@ namespace AvatarOutfitPropEditor
                                 name = OutfitPropEditorDefines.ParamExtraGroupInt(groupIndex)
                             },
                             value = setIndex
-                        });
+                        };
                         if (info.enableSubMenu)
                         {
+                            var extraSubBuilder = new PaginatedMenuBuilder(
+                                menuDir,
+                                "ExtraSub_" + groupIndex + "_" + setIndex + ".asset",
+                                "ExtraSub_" + groupIndex + "_" + setIndex + "_Page_");
+                            extraSubBuilder.AddControl(new VRCExpressionsMenu.Control
+                            {
+                                name = "穿戴",
+                                icon = info.image,
+                                type = VRCExpressionsMenu.Control.ControlType.Toggle,
+                                parameter = new VRCExpressionsMenu.Control.Parameter
+                                {
+                                    name = OutfitPropEditorDefines.ParamExtraGroupInt(groupIndex)
+                                },
+                                value = setIndex
+                            });
                             for (var subIndex = 0; subIndex < info.subToggleList.Count; subIndex++)
                             {
                                 var sub = info.subToggleList[subIndex];
@@ -1203,16 +1220,14 @@ namespace AvatarOutfitPropEditor
                                     }
                                 });
                             }
+
+                            var extraSubMenu = extraSubBuilder.FinalizeAll();
+                            extraItemControl.type = VRCExpressionsMenu.Control.ControlType.SubMenu;
+                            extraItemControl.subMenu = extraSubMenu;
+                            extraItemControl.parameter = null;
                         }
 
-                        var extraSubMenu = extraSubBuilder.FinalizeAll();
-                        setMenu.controls.Add(new VRCExpressionsMenu.Control
-                        {
-                            name = info.name,
-                            icon = info.image,
-                            type = VRCExpressionsMenu.Control.ControlType.SubMenu,
-                            subMenu = extraSubMenu
-                        });
+                        setMenu.controls.Add(extraItemControl);
                     }
 
                     FinalizeMenuPages(
@@ -1244,19 +1259,26 @@ namespace AvatarOutfitPropEditor
                     var info = ornamentInfoList[ornamentIndex];
                     TryAdvanceMenuPage(ref ornamentMenu, mainOrnamentMenu, ref pageIndex, menuDir, "OrnamentMenu_");
 
-                    var ornamentSubBuilder = new PaginatedMenuBuilder(
-                        menuDir,
-                        "OrnamentSub_" + ornamentIndex + ".asset",
-                        "OrnamentSub_" + ornamentIndex + "_Page_");
-                    ornamentSubBuilder.AddControl(new VRCExpressionsMenu.Control
+                    var ornamentItemControl = new VRCExpressionsMenu.Control
                     {
-                        name = "开关",
+                        name = info.name,
                         icon = info.image,
                         type = VRCExpressionsMenu.Control.ControlType.Toggle,
                         parameter = new VRCExpressionsMenu.Control.Parameter { name = OutfitPropEditorDefines.ParamOrn(ornamentIndex) }
-                    });
+                    };
                     if (info.enableSubMenu)
                     {
+                        var ornamentSubBuilder = new PaginatedMenuBuilder(
+                            menuDir,
+                            "OrnamentSub_" + ornamentIndex + ".asset",
+                            "OrnamentSub_" + ornamentIndex + "_Page_");
+                        ornamentSubBuilder.AddControl(new VRCExpressionsMenu.Control
+                        {
+                            name = "开关",
+                            icon = info.image,
+                            type = VRCExpressionsMenu.Control.ControlType.Toggle,
+                            parameter = new VRCExpressionsMenu.Control.Parameter { name = OutfitPropEditorDefines.ParamOrn(ornamentIndex) }
+                        });
                         for (var subIndex = 0; subIndex < info.subToggleList.Count; subIndex++)
                         {
                             var sub = info.subToggleList[subIndex];
@@ -1271,16 +1293,14 @@ namespace AvatarOutfitPropEditor
                                 parameter = new VRCExpressionsMenu.Control.Parameter { name = OutfitPropEditorDefines.ParamOrnSub(ornamentIndex, subIndex) }
                             });
                         }
+
+                        var ornamentSubMenu = ornamentSubBuilder.FinalizeAll();
+                        ornamentItemControl.type = VRCExpressionsMenu.Control.ControlType.SubMenu;
+                        ornamentItemControl.subMenu = ornamentSubMenu;
+                        ornamentItemControl.parameter = null;
                     }
 
-                    var ornamentSubMenu = ornamentSubBuilder.FinalizeAll();
-                    ornamentMenu.controls.Add(new VRCExpressionsMenu.Control
-                    {
-                        name = info.name,
-                        icon = info.image,
-                        type = VRCExpressionsMenu.Control.ControlType.SubMenu,
-                        subMenu = ornamentSubMenu
-                    });
+                    ornamentMenu.controls.Add(ornamentItemControl);
                     EditorUtility.SetDirty(ornamentMenu);
                 }
                 FinalizeMenuPages(ornamentMenu, mainOrnamentMenu, pageIndex, menuDir, "OrnamentMenu_", "OrnamentMenu.asset");
